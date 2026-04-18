@@ -1,13 +1,33 @@
 const { Events, MessageFlags } = require("discord.js");
 const { replyError } = require("../utils/embeds");
-const { handleMusicButton, refreshNowPlaying } = require("../music/controls");
+const { handleMusicInteraction, refreshNowPlaying } = require("../music/controls");
 
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction, client) {
-        if (interaction.isButton() && interaction.customId.startsWith("music:")) {
+        if (interaction.isAutocomplete()) {
+            const command = client.commands.get(interaction.commandName);
+            if (command?.autocomplete) {
+                try { await command.autocomplete(interaction, client); }
+                catch (err) {
+                    console.error(`[autocomplete] ${interaction.commandName} failed:`, err);
+                    await interaction.respond([]).catch(() => {});
+                }
+            }
+            return;
+        }
+
+        const isMusicComponent =
+            (interaction.isButton() ||
+             interaction.isStringSelectMenu() ||
+             interaction.isModalSubmit()) &&
+            interaction.customId?.startsWith("music:");
+
+        if (isMusicComponent) {
             try {
-                const result = await handleMusicButton(interaction, client);
+                const result = await handleMusicInteraction(interaction, client);
+                if (result === null) return;
+
                 await interaction.reply({
                     content: result.message ?? (result.ok ? "Done." : "Failed."),
                     flags: MessageFlags.Ephemeral,
@@ -17,7 +37,7 @@ module.exports = {
                     if (player) await refreshNowPlaying(player, client);
                 }
             } catch (err) {
-                console.error("[buttonClick] error:", err);
+                console.error("[component] error:", err);
                 if (!interaction.replied) {
                     await interaction.reply({
                         content: `Error: \`${err.message}\``,

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { replyError } = require("../../utils/embeds");
+const { playQuery } = require("../../music/playQuery");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,54 +24,23 @@ module.exports = {
 
         await interaction.deferReply();
 
-        let player = client.lavalink.getPlayer(interaction.guildId);
-        if (!player) {
-            player = client.lavalink.createPlayer({
-                guildId: interaction.guildId,
-                voiceChannelId: voiceChannel.id,
-                textChannelId: interaction.channelId,
-                selfDeaf: true,
-                selfMute: false,
-                volume: 80,
-            });
-        }
+        const res = await playQuery(client, {
+            guildId: interaction.guildId,
+            voiceChannel,
+            textChannelId: interaction.channelId,
+            user: interaction.user,
+            member: interaction.member,
+            query,
+        });
 
-        if (!player.connected) {
-            try {
-                await player.connect();
-            } catch (err) {
-                return replyError(interaction, `Voice connect failed: ${err.message}`);
-            }
-        }
+        if (!res.ok) return replyError(interaction, res.message);
 
-        const res = await player.search({ query, source: "ytsearch" }, interaction.user).catch(() => null);
-
-        if (!res || !res.tracks?.length) {
-            return replyError(interaction, `No results for **${query}**.`);
-        }
-
-        if (res.loadType === "playlist") {
-            await player.queue.add(res.tracks);
-            await interaction.editReply({
-                content: `Added playlist **${res.playlist?.name ?? "Unknown"}** — ${res.tracks.length} tracks`,
-            });
+        if (res.track) {
+            await interaction.editReply(`Queued: **${res.track.info.title}**`);
         } else {
-            const track = res.tracks[0];
-            await player.queue.add(track);
-            await interaction.editReply({
-                content: `Queued: **${track.info.title}** · \`${fmt(track.info.duration)}\``,
-            });
-        }
-
-        if (!player.playing && !player.paused) {
-            await player.play();
+            await interaction.editReply(
+                `Queued playlist **${res.playlist?.name ?? "Unknown"}** — ${res.playlistLength} tracks`,
+            );
         }
     },
 };
-
-function fmt(ms) {
-    if (!ms || ms < 0) return "LIVE";
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${m}:${String(s % 60).padStart(2, "0")}`;
-}

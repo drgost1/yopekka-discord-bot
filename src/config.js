@@ -19,4 +19,8 @@ module.exports = {
         password: process.env.LAVALINK_PASSWORD || "youshallnotpass",
         secure: process.env.LAVALINK_SECURE === "true",
     },
+    musicChannels: (process.env.MUSIC_CHANNEL_IDS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
 };
